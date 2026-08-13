@@ -1,0 +1,10 @@
+# Real credentials — copy config-sample.php to config.php and fill in your own values
+config.php
+
+# Cron output
+cron.log
+*.log
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
