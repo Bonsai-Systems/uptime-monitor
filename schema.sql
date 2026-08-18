@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sites (
     domain_expires_at DATETIME NULL,
     domain_checked_at DATETIME NULL,
     domain_alert_sent TINYINT(1) NOT NULL DEFAULT 0,
-    agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'Realityhouse', 'Seedbed') NOT NULL DEFAULT 'Bonsai Digital',
+    agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed') NOT NULL DEFAULT 'Bonsai Digital',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -75,3 +75,13 @@ CREATE TABLE IF NOT EXISTS settings (
 -- --------------------------------------------------------------------------
 -- ALTER TABLE sites
 --     ADD COLUMN agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'Realityhouse', 'Seedbed') NOT NULL DEFAULT 'Bonsai Digital';
+
+-- --------------------------------------------------------------------------
+-- Migration: run this once against an existing database whenever
+-- um_agencies() in includes/functions.php gains a new agency — the ENUM
+-- must be kept in sync by hand, MODIFY COLUMN is additive-safe (existing
+-- rows keep their value) as long as you only add options, never remove or
+-- rename one that's still in use.
+-- --------------------------------------------------------------------------
+-- ALTER TABLE sites
+--     MODIFY COLUMN agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed') NOT NULL DEFAULT 'Bonsai Digital';

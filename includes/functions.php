@@ -5,7 +5,8 @@ require_once __DIR__ . '/settings.php';
 /**
  * The fixed list of agencies sites can be attributed to. Kept in one place
  * so the admin form dropdown, input validation, and dashboard filter tabs
- * can't drift out of sync — matches the `agency` ENUM in schema.sql.
+ * can't drift out of sync — must match the `agency` ENUM in schema.sql, or
+ * MySQL silently coerces unrecognised values to '' on save.
  */
 function um_agencies(): array {
     return ['Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed'];
