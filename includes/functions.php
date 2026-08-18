@@ -9,7 +9,7 @@ require_once __DIR__ . '/settings.php';
  * MySQL silently coerces unrecognised values to '' on save.
  */
 function um_agencies(): array {
-    return ['Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed'];
+    return ['Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed', 'twohundred.digital'];
 }
 
 /**
