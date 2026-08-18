@@ -8,7 +8,7 @@ require_once __DIR__ . '/settings.php';
  * can't drift out of sync — matches the `agency` ENUM in schema.sql.
  */
 function um_agencies(): array {
-    return ['Bonsai Digital', 'SPS Marketing', 'Webheads', 'Realityhouse', 'Seedbed'];
+    return ['Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed'];
 }
 
 /**
