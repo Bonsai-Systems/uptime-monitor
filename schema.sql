@@ -23,15 +23,32 @@ CREATE TABLE IF NOT EXISTS sites (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS site_paths (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_id INT NOT NULL,
+    path VARCHAR(255) NOT NULL,
+    label VARCHAR(100) NULL,
+    expected_status_code INT NOT NULL DEFAULT 200,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    current_status ENUM('up', 'down', 'unknown') NOT NULL DEFAULT 'unknown',
+    last_checked_at DATETIME NULL,
+    last_http_code INT NULL,
+    last_error VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS checks (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     site_id INT NOT NULL,
+    site_path_id INT NULL,
     checked_at DATETIME NOT NULL,
     status ENUM('up', 'down') NOT NULL,
     http_code INT NULL,
     response_time_ms INT NULL,
     error_message VARCHAR(500) NULL,
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (site_path_id) REFERENCES site_paths(id) ON DELETE CASCADE,
     INDEX idx_site_time (site_id, checked_at)
 ) ENGINE=InnoDB;
 
@@ -92,3 +109,29 @@ CREATE TABLE IF NOT EXISTS settings (
 -- --------------------------------------------------------------------------
 -- ALTER TABLE sites
 --     MODIFY COLUMN agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed', 'twohundred.digital') NOT NULL DEFAULT 'Bonsai Digital';
+
+-- --------------------------------------------------------------------------
+-- Migration: run this once against an existing database that predates
+-- multiple check paths per site (e.g. checking /wp-login.php or
+-- /posts?per_page=1 in addition to the main URL). CREATE TABLE IF NOT EXISTS
+-- above will not add the site_paths table or the new checks column to an
+-- already-existing database, so both need adding by hand.
+-- --------------------------------------------------------------------------
+-- CREATE TABLE IF NOT EXISTS site_paths (
+--     id INT AUTO_INCREMENT PRIMARY KEY,
+--     site_id INT NOT NULL,
+--     path VARCHAR(255) NOT NULL,
+--     label VARCHAR(100) NULL,
+--     expected_status_code INT NOT NULL DEFAULT 200,
+--     is_active TINYINT(1) NOT NULL DEFAULT 1,
+--     current_status ENUM('up', 'down', 'unknown') NOT NULL DEFAULT 'unknown',
+--     last_checked_at DATETIME NULL,
+--     last_http_code INT NULL,
+--     last_error VARCHAR(500) NULL,
+--     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+-- ) ENGINE=InnoDB;
+--
+-- ALTER TABLE checks
+--     ADD COLUMN site_path_id INT NULL AFTER site_id,
+--     ADD FOREIGN KEY (site_path_id) REFERENCES site_paths(id) ON DELETE CASCADE;

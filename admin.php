@@ -63,6 +63,38 @@ function um_validate_site_input(array $input): array {
     ];
 }
 
+/**
+ * Validates the add-path form. Returns a clean data array on success,
+ * or throws via $errors on failure (caller checks empty($errors) before saving).
+ */
+function um_validate_path_input(array $input): array {
+    global $errors;
+
+    $path = trim((string)($input['path'] ?? ''));
+    $label = trim((string)($input['label'] ?? ''));
+    $expectedCode = (int)($input['path_expected_status_code'] ?? 200);
+
+    if ($path === '' || mb_strlen($path) > 255) {
+        $errors[] = 'Path is required and must be under 255 characters.';
+    } elseif ($path[0] !== '/') {
+        $errors[] = 'Path must start with a / (e.g. /wp-login.php).';
+    }
+
+    if (mb_strlen($label) > 100) {
+        $errors[] = 'Label must be under 100 characters.';
+    }
+
+    if ($expectedCode < 100 || $expectedCode > 599) {
+        $errors[] = 'Expected status code must be a valid HTTP status code.';
+    }
+
+    return [
+        'path' => $path,
+        'label' => $label !== '' ? $label : null,
+        'expected_status_code' => $expectedCode,
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!um_verify_csrf()) {
         $errors[] = 'Session expired — please try again.';
@@ -131,14 +163,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $notice = $ok ? 'SSL/domain expiry refreshed.' : 'Site not found.';
             }
         }
+
+        if ($action === 'add_path') {
+            $siteId = (int)($_POST['site_id'] ?? 0);
+            $data = um_validate_path_input($_POST);
+            if (empty($errors) && $siteId > 0) {
+                $pdo->prepare(
+                    "INSERT INTO site_paths (site_id, path, label, expected_status_code)
+                     VALUES (?, ?, ?, ?)"
+                )->execute([$siteId, $data['path'], $data['label'], $data['expected_status_code']]);
+                $notice = 'Check path added.';
+            }
+        }
+
+        if ($action === 'toggle_path_active') {
+            $pathId = (int)($_POST['path_id'] ?? 0);
+            if ($pathId > 0) {
+                $pdo->prepare("UPDATE site_paths SET is_active = 1 - is_active WHERE id = ?")->execute([$pathId]);
+                $notice = 'Check path status changed.';
+            }
+        }
+
+        if ($action === 'delete_path') {
+            $pathId = (int)($_POST['path_id'] ?? 0);
+            if ($pathId > 0) {
+                $pdo->prepare("DELETE FROM site_paths WHERE id = ?")->execute([$pathId]);
+                $notice = 'Check path deleted.';
+            }
+        }
     }
 }
 
 $editSite = null;
+$editSitePaths = [];
 if (isset($_GET['edit'])) {
     $stmt = $pdo->prepare("SELECT * FROM sites WHERE id = ?");
     $stmt->execute([(int)$_GET['edit']]);
     $editSite = $stmt->fetch();
+    if ($editSite) {
+        $editSitePaths = um_site_paths((int)$editSite['id']);
+    }
 }
 
 $agencyFilter = (string)($_GET['agency'] ?? '');
@@ -265,6 +329,82 @@ $csrfToken = um_csrf_token();
             </div>
         </form>
     </div>
+
+    <?php if ($editSite): ?>
+    <div class="admin-card">
+        <h2>Check paths for <?= htmlspecialchars($editSite['name']) ?></h2>
+        <p class="field-hint">Extra URLs checked alongside the main URL above on every cycle — e.g. <code>/wp-login.php</code> or <code>/posts?per_page=1</code>. If any active path fails, the whole site is marked down and an alert fires (see the incident cause for which one).</p>
+
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Path</th>
+                    <th>Label</th>
+                    <th>Expected code</th>
+                    <th>Status</th>
+                    <th>Active</th>
+                    <th>Last checked</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($editSitePaths as $path): ?>
+                    <tr>
+                        <td><code><?= htmlspecialchars($path['path']) ?></code></td>
+                        <td><?= htmlspecialchars($path['label'] ?? '—') ?></td>
+                        <td><?= (int)$path['expected_status_code'] ?></td>
+                        <td><span class="status-pill <?= htmlspecialchars($path['current_status']) ?>"><?= htmlspecialchars($path['current_status']) ?></span></td>
+                        <td><?= $path['is_active'] ? 'Yes' : 'No' ?></td>
+                        <td><?= $path['last_checked_at'] ? htmlspecialchars($path['last_checked_at']) : 'Never' ?></td>
+                        <td class="admin-row-actions">
+                            <form method="post" action="admin.php?edit=<?= (int)$editSite['id'] ?>" class="inline-form">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                <input type="hidden" name="action" value="toggle_path_active">
+                                <input type="hidden" name="path_id" value="<?= (int)$path['id'] ?>">
+                                <button type="submit" class="link-button"><?= $path['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+                            </form>
+                            <form method="post" action="admin.php?edit=<?= (int)$editSite['id'] ?>" class="inline-form"
+                                  onsubmit="return confirm('Delete this check path?');">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                <input type="hidden" name="action" value="delete_path">
+                                <input type="hidden" name="path_id" value="<?= (int)$path['id'] ?>">
+                                <button type="submit" class="link-button link-button-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (empty($editSitePaths)): ?>
+                    <tr><td colspan="7">No extra check paths yet — the main URL above is checked on its own.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+
+        <form method="post" action="admin.php?edit=<?= (int)$editSite['id'] ?>" class="site-form">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="action" value="add_path">
+            <input type="hidden" name="site_id" value="<?= (int)$editSite['id'] ?>">
+
+            <div class="form-row">
+                <div>
+                    <label for="path">Path</label>
+                    <input type="text" id="path" name="path" maxlength="255" placeholder="/wp-login.php" required>
+                </div>
+                <div>
+                    <label for="label">Label (optional)</label>
+                    <input type="text" id="label" name="label" maxlength="100" placeholder="WP login">
+                </div>
+                <div>
+                    <label for="path_expected_status_code">Expected status code</label>
+                    <input type="number" id="path_expected_status_code" name="path_expected_status_code" min="100" max="599" value="200">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit">Add check path</button>
+            </div>
+        </form>
+    </div>
+    <?php endif; ?>
 
     <h2>All sites</h2>
 

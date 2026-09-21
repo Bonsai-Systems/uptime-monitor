@@ -22,7 +22,7 @@ function um_uptime_percent(int $siteId, int $days): float {
             SUM(status = 'up') AS up_count,
             COUNT(*) AS total_count
          FROM checks
-         WHERE site_id = ? AND checked_at >= (NOW() - INTERVAL ? DAY)"
+         WHERE site_id = ? AND site_path_id IS NULL AND checked_at >= (NOW() - INTERVAL ? DAY)"
     );
     $stmt->execute([$siteId, $days]);
     $row = $stmt->fetch();
@@ -42,7 +42,7 @@ function um_avg_response_time(int $siteId, int $days): ?int {
     $stmt = $pdo->prepare(
         "SELECT AVG(response_time_ms) AS avg_ms
          FROM checks
-         WHERE site_id = ? AND checked_at >= (NOW() - INTERVAL ? DAY) AND status = 'up'"
+         WHERE site_id = ? AND site_path_id IS NULL AND checked_at >= (NOW() - INTERVAL ? DAY) AND status = 'up'"
     );
     $stmt->execute([$siteId, $days]);
     $row = $stmt->fetch();
@@ -57,7 +57,7 @@ function um_recent_checks(int $siteId, int $limit = 100): array {
     $stmt = $pdo->prepare(
         "SELECT checked_at, status, http_code, response_time_ms
          FROM checks
-         WHERE site_id = ?
+         WHERE site_id = ? AND site_path_id IS NULL
          ORDER BY checked_at DESC
          LIMIT ?"
     );
@@ -78,7 +78,7 @@ function um_response_time_series(int $siteId, int $hours, int $maxPoints = 120):
     $stmt = $pdo->prepare(
         "SELECT checked_at, response_time_ms
          FROM checks
-         WHERE site_id = ? AND checked_at >= (NOW() - INTERVAL ? HOUR)
+         WHERE site_id = ? AND site_path_id IS NULL AND checked_at >= (NOW() - INTERVAL ? HOUR)
          ORDER BY checked_at ASC"
     );
     $stmt->bindValue(1, $siteId, PDO::PARAM_INT);
@@ -106,6 +106,17 @@ function um_response_time_series(int $siteId, int $hours, int $maxPoints = 120):
         'labels' => array_map(fn($r) => date($format, strtotime($r['checked_at'])), $rows),
         'data'   => array_map(fn($r) => $r['response_time_ms'], $rows),
     ];
+}
+
+/**
+ * All extra check paths for a site (active and inactive — the admin edit
+ * screen needs to show and let you toggle inactive ones too).
+ */
+function um_site_paths(int $siteId): array {
+    $pdo = um_db();
+    $stmt = $pdo->prepare("SELECT * FROM site_paths WHERE site_id = ? ORDER BY id");
+    $stmt->execute([$siteId]);
+    return $stmt->fetchAll();
 }
 
 function um_incidents(int $siteId, int $limit = 20): array {

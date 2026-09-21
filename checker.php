@@ -23,11 +23,7 @@ $sites = $pdo->query(
 )->fetchAll();
 
 if (!empty($sites)) {
-    $results = um_check_sites_with_retry($sites, $concurrency);
-
-    foreach ($results as $siteId => $result) {
-        um_process_result($pdo, $siteId, $result);
-    }
+    um_check_sites_with_paths($pdo, $sites, $concurrency);
 }
 
 // SSL/domain expiry — gated separately, roughly once a day per site (see

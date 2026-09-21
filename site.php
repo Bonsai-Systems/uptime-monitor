@@ -19,6 +19,7 @@ $uptime7d  = um_uptime_percent($siteId, 7);
 $uptime30d = um_uptime_percent($siteId, 30);
 $avgResp   = um_avg_response_time($siteId, 7);
 $incidents = um_incidents($siteId, 20);
+$sitePaths = array_filter(um_site_paths($siteId), fn($p) => $p['is_active']);
 
 $sslDays    = um_days_until($site['ssl_expires_at']);
 $domainDays = um_days_until($site['domain_expires_at']);
@@ -113,6 +114,28 @@ $chartRanges = [
             <?php endif; ?>
         </div>
     </div>
+
+    <?php if (!empty($sitePaths)): ?>
+    <h3>Check paths</h3>
+    <table class="incidents">
+        <thead>
+            <tr>
+                <th>Path</th>
+                <th>Status</th>
+                <th>Last checked</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($sitePaths as $path): ?>
+                <tr>
+                    <td><code><?= htmlspecialchars($path['label'] ?: $path['path']) ?></code></td>
+                    <td><span class="status-pill <?= htmlspecialchars($path['current_status']) ?>"><?= htmlspecialchars($path['current_status']) ?></span></td>
+                    <td><?= $path['last_checked_at'] ? htmlspecialchars($path['last_checked_at']) : 'Never' ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php endif; ?>
 
     <h3>Recent incidents</h3>
     <table class="incidents">

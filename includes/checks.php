@@ -92,52 +92,173 @@ function um_check_sites_with_retry(array $sites, int $concurrency, int $maxRetri
 }
 
 /**
- * Whether a single check result counts as "up" for a given site's expected status code.
+ * Whether a single check result counts as "up" for a given site's (or path's)
+ * expected status code. Works for both a `sites` row and a `site_paths` row —
+ * both have an `expected_status_code` column.
  */
-function um_is_check_up(array $site, array $result): bool {
-    return $result['http_code'] === (int)$site['expected_status_code'] && empty($result['error']);
+function um_is_check_up(array $target, array $result): bool {
+    return $result['http_code'] === (int)$target['expected_status_code'] && empty($result['error']);
 }
 
 /**
- * Logs the check, updates site status, and handles incident open/close + Slack alert.
+ * Active site_paths rows for a batch of sites, grouped by site_id, so the
+ * checker only needs one query per cron run rather than one per site.
  */
-function um_process_result(PDO $pdo, int $siteId, array $result): void {
+function um_active_paths_for_sites(PDO $pdo, array $siteIds): array {
+    $siteIds = array_values(array_unique(array_map('intval', $siteIds)));
+    if (empty($siteIds)) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($siteIds), '?'));
+    $stmt = $pdo->prepare("SELECT * FROM site_paths WHERE is_active = 1 AND site_id IN ({$placeholders})");
+    $stmt->execute($siteIds);
+
+    $bySite = [];
+    foreach ($stmt->fetchAll() as $path) {
+        $bySite[(int)$path['site_id']][] = $path;
+    }
+    return $bySite;
+}
+
+/**
+ * Joins a site's base URL with an extra check path, e.g.
+ * "https://client.com" + "/wp-login.php" -> "https://client.com/wp-login.php".
+ */
+function um_build_path_url(string $siteUrl, string $path): string {
+    return rtrim($siteUrl, '/') . '/' . ltrim($path, '/');
+}
+
+/**
+ * Checks a site's main URL plus all of its active extra paths (concurrently,
+ * with retries — see um_check_sites_with_retry), then rolls the whole thing
+ * into a single up/down determination per site: the site counts as down if
+ * its main URL OR any active path fails, so exactly one incident/alert fires
+ * for the site as a whole rather than one per failing path.
+ */
+function um_check_sites_with_paths(PDO $pdo, array $sites, int $concurrency): void {
+    if (empty($sites)) {
+        return;
+    }
+
+    $pathsBySite = um_active_paths_for_sites($pdo, array_column($sites, 'id'));
+
+    $targets = [];
+    foreach ($sites as $site) {
+        $targets[$site['id']] = [
+            'id' => $site['id'],
+            'url' => $site['url'],
+            'timeout_seconds' => $site['timeout_seconds'],
+            'expected_status_code' => $site['expected_status_code'],
+        ];
+
+        foreach ($pathsBySite[$site['id']] ?? [] as $path) {
+            $key = 'path:' . $path['id'];
+            $targets[$key] = [
+                'id' => $key,
+                'url' => um_build_path_url($site['url'], $path['path']),
+                'timeout_seconds' => $site['timeout_seconds'],
+                'expected_status_code' => $path['expected_status_code'],
+            ];
+        }
+    }
+
+    $results = um_check_sites_with_retry($targets, $concurrency);
+
+    foreach ($sites as $site) {
+        if (!isset($results[$site['id']])) {
+            continue;
+        }
+
+        $pathResults = [];
+        foreach ($pathsBySite[$site['id']] ?? [] as $path) {
+            $key = 'path:' . $path['id'];
+            if (isset($results[$key])) {
+                $pathResults[] = ['row' => $path, 'result' => $results[$key]];
+            }
+        }
+
+        um_process_site_result($pdo, (int)$site['id'], $results[$site['id']], $pathResults);
+    }
+}
+
+/**
+ * Logs the main-URL check and every extra path's check, updates each path's
+ * own status, and handles the site-level incident open/close + Slack/email
+ * alert — a path failure marks the whole site down (see
+ * um_check_sites_with_paths) so there's one alert per site, not one per path.
+ */
+function um_process_site_result(PDO $pdo, int $siteId, array $mainResult, array $pathResults): void {
     $stmt = $pdo->prepare("SELECT * FROM sites WHERE id = ?");
     $stmt->execute([$siteId]);
     $site = $stmt->fetch();
     if (!$site) return;
 
-    $isUp = um_is_check_up($site, $result);
-    $newStatus = $isUp ? 'up' : 'down';
     $now = date('Y-m-d H:i:s');
+    $mainIsUp = um_is_check_up($site, $mainResult);
 
-    // Log the check
+    $failureReasons = [];
+    if (!$mainIsUp) {
+        $failureReasons[] = $mainResult['error'] ?: "HTTP {$mainResult['http_code']}";
+    }
+
+    foreach ($pathResults as $entry) {
+        $path = $entry['row'];
+        $result = $entry['result'];
+        $pathIsUp = um_is_check_up($path, $result);
+        $pathStatus = $pathIsUp ? 'up' : 'down';
+
+        $pdo->prepare(
+            "INSERT INTO checks (site_id, site_path_id, checked_at, status, http_code, response_time_ms, error_message)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([
+            $siteId, $path['id'], $now, $pathStatus,
+            $result['http_code'] ?: null,
+            $result['response_time_ms'] ?: null,
+            $result['error'],
+        ]);
+
+        $pdo->prepare(
+            "UPDATE site_paths SET current_status = ?, last_checked_at = ?, last_http_code = ?, last_error = ? WHERE id = ?"
+        )->execute([$pathStatus, $now, $result['http_code'] ?: null, $result['error'], $path['id']]);
+
+        if (!$pathIsUp) {
+            $label = ($path['label'] ?? '') !== '' ? $path['label'] : $path['path'];
+            $failureReasons[] = "{$label}: " . ($result['error'] ?: "HTTP {$result['http_code']}");
+        }
+    }
+
+    $newStatus = empty($failureReasons) ? 'up' : 'down';
+
+    // Log the main-URL check (kept separate from path checks, which are
+    // logged above — this keeps the site's own uptime%/response-time history
+    // representing the main URL only, not a blend with unrelated endpoints).
     $pdo->prepare(
         "INSERT INTO checks (site_id, checked_at, status, http_code, response_time_ms, error_message)
          VALUES (?, ?, ?, ?, ?, ?)"
     )->execute([
-        $siteId, $now, $newStatus,
-        $result['http_code'] ?: null,
-        $result['response_time_ms'] ?: null,
-        $result['error'],
+        $siteId, $now, $mainIsUp ? 'up' : 'down',
+        $mainResult['http_code'] ?: null,
+        $mainResult['response_time_ms'] ?: null,
+        $mainResult['error'],
     ]);
 
-    // Update site's current status + last checked time
     $pdo->prepare("UPDATE sites SET current_status = ?, last_checked_at = ? WHERE id = ?")
         ->execute([$newStatus, $now, $siteId]);
 
     $previousStatus = $site['current_status'];
+    $cause = implode('; ', $failureReasons);
 
     // State change: was up (or unknown), now down — open an incident + alert
     if ($newStatus === 'down' && $previousStatus !== 'down') {
         $pdo->prepare(
             "INSERT INTO incidents (site_id, started_at, cause) VALUES (?, ?, ?)"
-        )->execute([$siteId, $now, $result['error'] ?: "HTTP {$result['http_code']}"]);
+        )->execute([$siteId, $now, $cause]);
 
         um_send_slack_alert(
             ":red_circle: *{$site['name']}* appears to be DOWN\n" .
             "URL: {$site['url']}\n" .
-            "Reason: " . ($result['error'] ?: "HTTP {$result['http_code']}") . "\n" .
+            "Reason: {$cause}\n" .
             "Time: {$now}"
         );
 
@@ -145,7 +266,7 @@ function um_process_result(PDO $pdo, int $siteId, array $result): void {
             "DOWN: {$site['name']}",
             "{$site['name']} appears to be DOWN\n" .
             "URL: {$site['url']}\n" .
-            "Reason: " . ($result['error'] ?: "HTTP {$result['http_code']}") . "\n" .
+            "Reason: {$cause}\n" .
             "Time: {$now}"
         );
     }
@@ -279,10 +400,7 @@ function um_check_site_now(PDO $pdo, int $siteId): ?string {
     $site = $stmt->fetch();
     if (!$site) return null;
 
-    $results = um_check_sites_with_retry([$site], 1);
-    if (!isset($results[$siteId])) return null;
-
-    um_process_result($pdo, $siteId, $results[$siteId]);
+    um_check_sites_with_paths($pdo, [$site], 1);
 
     $stmt->execute([$siteId]);
     $updated = $stmt->fetch();

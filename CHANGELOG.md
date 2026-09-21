@@ -9,10 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - False "down" alerts from transient blips — a failed check now gets up to 2 retries (3s apart) within the same cron run before the site is actually marked down and an incident/alert fires. `um_check_sites_with_retry()` in `includes/checks.php` wraps the existing `um_check_sites_concurrently()`; `checker.php` and the admin "Check now" action (`um_check_site_now()`) both use it now.
 
-### Planned
-- Multiple check paths per site — allow a site to define extra URL paths beyond the root (e.g. `/wp-login.php`, `/posts?per_page=1`) that get checked alongside the main URL, so a site can be monitored on more than one endpoint. Will need a new table (e.g. `site_paths`, FK to `sites`) rather than fixed columns, since "two fields" won't scale if a third path is wanted later — `um_check_sites_concurrently()`/`um_process_result()` in `includes/checks.php` would need to loop each site's paths rather than assuming one URL per site.
-
 ### Added
+- Multiple check paths per site — a site can now define extra URL paths (e.g. `/wp-login.php`, `/posts?per_page=1`) checked alongside its main URL on every cron cycle, managed from a new "Check paths" panel on the site's edit screen in `admin.php` (add, activate/deactivate, delete; each path has its own expected status code and optional label). Backed by a new `site_paths` table and a nullable `checks.site_path_id` column — **requires the migration at the bottom of `schema.sql` on existing databases**. If the main URL or any active path fails, the whole site is marked down and a single incident/alert fires (see `um_check_sites_with_paths()`/`um_process_site_result()` in `includes/checks.php`), naming which path caused it in the incident cause. Per-path check history is logged to `checks` for future reference but excluded from the site's own uptime%/response-time stats, which continue to reflect the main URL only. Path statuses are shown on `site.php` and in the admin edit panel.
 - SSL certificate and domain (WHOIS) expiry tracking per site — new `monitor_ssl`/`monitor_domain` toggles on the add/edit form, colour-coded expiry badges on the admin table and site detail page, a "Refresh expiry" admin action, and a one-time Slack/email alert when either crosses the configurable `expiry_alert_days` threshold (default 14 days). SSL is read directly off the live TLS certificate; domain expiry uses a best-effort raw WHOIS lookup (`includes/expiry.php`) that follows IANA's WHOIS referral (handling both the `refer:` field gTLDs use and the `whois:` field ccTLDs like `.uk` use) and parses Nominet's "Renewal date:" field alongside the more common "Expiry Date:"/"Registry Expiry Date:" fields, so `.uk`/`.co.uk` domains resolve correctly. Checked once daily per site via `checker.php`, independent of the uptime check interval. **Requires an `ALTER TABLE` migration on existing databases — see the commented block at the bottom of `schema.sql`.**
 - Light/dark mode toggle, persisted per-browser via `localStorage`, applied before first paint to avoid a flash of the wrong theme.
 - Favicon (`assets/favicon.svg`) — Bonsai-branded pulse icon.
@@ -32,5 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Admin panel (`admin.php`) for adding, editing, activating/deactivating, deleting, and manually re-checking sites — no more direct SQL required.
 - Session-based admin login (`login.php` / `logout.php`) with a single shared password, CSRF-protected forms.
 - `schema.sql` for one-time database setup (`sites`, `checks`, `incidents` tables).
+- `config-sample.php` template — `config.php` is gitignored so real credentials never get committed.
+- Looker Studio integration notes for client-facing uptime reporting.
+sss- `schema.sql` for one-time database setup (`sites`, `checks`, `incidents` tables).
 - `config-sample.php` template — `config.php` is gitignored so real credentials never get committed.
 - Looker Studio integration notes for client-facing uptime reporting.

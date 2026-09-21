@@ -62,6 +62,13 @@ MySQL is the source of truth for both the dashboard and reporting, so you don't 
    Point Looker Studio at `daily_uptime` for a clean per-day, per-site uptime chart — good for a client-facing report page.
 3. Your MySQL server needs to be reachable from Google's IP ranges (or use Cloud SQL Proxy / an SSH tunnel if it's locked down) — check with your host if remote MySQL access is currently open.
 
+## Check paths
+
+- On a site's edit screen in `admin.php`, add extra URL paths to check alongside the main URL — e.g. `/wp-login.php` or `/posts?per_page=1` — each with its own expected status code and optional label.
+- Checked on the same cron cycle as the main URL, with the same retry behaviour.
+- If the main URL or any active path fails, the whole site is marked down and a single Slack/email alert fires, naming which path caused it.
+- Per-path status is shown on the site's edit screen and on `site.php`; per-path check history is logged but doesn't affect the site's own uptime%/response-time stats (those stay about the main URL).
+
 ## SSL & domain expiry
 
 - Each site has independent `Monitor SSL certificate expiry` / `Monitor domain (WHOIS) expiry` toggles on the add/edit form (both on by default).
