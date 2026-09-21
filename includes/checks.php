@@ -56,6 +56,49 @@ function um_check_sites_concurrently(array $sites, int $concurrency): array {
 }
 
 /**
+ * Retries failed checks in-place before they're treated as authoritative, so a
+ * single dropped connection or transient timeout doesn't flip a genuinely-up
+ * site to "down" and fire an alert. Only sites still failing after all retries
+ * are returned as down.
+ */
+function um_check_sites_with_retry(array $sites, int $concurrency, int $maxRetries = 2, int $retryDelaySeconds = 3): array {
+    $results = um_check_sites_concurrently($sites, $concurrency);
+
+    $sitesById = [];
+    foreach ($sites as $site) {
+        $sitesById[$site['id']] = $site;
+    }
+
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        $failedSites = [];
+        foreach ($results as $siteId => $result) {
+            if (!um_is_check_up($sitesById[$siteId], $result)) {
+                $failedSites[] = $sitesById[$siteId];
+            }
+        }
+
+        if (empty($failedSites)) {
+            break;
+        }
+
+        sleep($retryDelaySeconds);
+        $retryResults = um_check_sites_concurrently($failedSites, $concurrency);
+        foreach ($retryResults as $siteId => $result) {
+            $results[$siteId] = $result;
+        }
+    }
+
+    return $results;
+}
+
+/**
+ * Whether a single check result counts as "up" for a given site's expected status code.
+ */
+function um_is_check_up(array $site, array $result): bool {
+    return $result['http_code'] === (int)$site['expected_status_code'] && empty($result['error']);
+}
+
+/**
  * Logs the check, updates site status, and handles incident open/close + Slack alert.
  */
 function um_process_result(PDO $pdo, int $siteId, array $result): void {
@@ -64,7 +107,7 @@ function um_process_result(PDO $pdo, int $siteId, array $result): void {
     $site = $stmt->fetch();
     if (!$site) return;
 
-    $isUp = $result['http_code'] === (int)$site['expected_status_code'] && empty($result['error']);
+    $isUp = um_is_check_up($site, $result);
     $newStatus = $isUp ? 'up' : 'down';
     $now = date('Y-m-d H:i:s');
 
@@ -236,7 +279,7 @@ function um_check_site_now(PDO $pdo, int $siteId): ?string {
     $site = $stmt->fetch();
     if (!$site) return null;
 
-    $results = um_check_sites_concurrently([$site], 1);
+    $results = um_check_sites_with_retry([$site], 1);
     if (!isset($results[$siteId])) return null;
 
     um_process_result($pdo, $siteId, $results[$siteId]);

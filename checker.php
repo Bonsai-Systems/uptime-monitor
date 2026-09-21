@@ -23,7 +23,7 @@ $sites = $pdo->query(
 )->fetchAll();
 
 if (!empty($sites)) {
-    $results = um_check_sites_concurrently($sites, $concurrency);
+    $results = um_check_sites_with_retry($sites, $concurrency);
 
     foreach ($results as $siteId => $result) {
         um_process_result($pdo, $siteId, $result);

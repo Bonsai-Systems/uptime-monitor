@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased] - 2026-08-03
 
+### Fixed
+- False "down" alerts from transient blips — a failed check now gets up to 2 retries (3s apart) within the same cron run before the site is actually marked down and an incident/alert fires. `um_check_sites_with_retry()` in `includes/checks.php` wraps the existing `um_check_sites_concurrently()`; `checker.php` and the admin "Check now" action (`um_check_site_now()`) both use it now.
+
 ### Planned
 - Multiple check paths per site — allow a site to define extra URL paths beyond the root (e.g. `/wp-login.php`, `/posts?per_page=1`) that get checked alongside the main URL, so a site can be monitored on more than one endpoint. Will need a new table (e.g. `site_paths`, FK to `sites`) rather than fixed columns, since "two fields" won't scale if a third path is wanted later — `um_check_sites_concurrently()`/`um_process_result()` in `includes/checks.php` would need to loop each site's paths rather than assuming one URL per site.
 
