@@ -38,7 +38,7 @@ Self-hosted UptimeRobot replacement. PHP + MySQL, no frameworks, no per-check bi
 
 - `login.php` / `logout.php` — session-based login, single shared password (see setup step 3 above).
 - `admin.php` — add, edit, activate/deactivate, delete, or manually trigger a check for any site. All forms are CSRF-protected and require login.
-- `settings.php` — edit the Slack webhook, alert email, checker concurrency, and admin password from the browser. Values are stored in the `settings` table and take precedence over `config.php` once saved.
+- `settings.php` — edit the Slack webhook, alert email, Support Desk ticket webhook, checker concurrency, and admin password from the browser. Values are stored in the `settings` table and take precedence over `config.php` once saved.
 - The dashboard (`index.php`) shows a "Manage sites" link when logged in, or "Log in" otherwise. `site.php` (per-site detail) stays public, matching current behaviour.
 
 ## Looker Studio
@@ -79,9 +79,18 @@ MySQL is the source of truth for both the dashboard and reporting, so you don't 
 - A one-time Slack/email alert fires when either crosses the `expiry_alert_days` threshold (Settings), and resets automatically if the cert/domain is renewed further out — so you won't get the same alert every day.
 - "Refresh expiry" on the admin table forces an immediate re-check for one site, bypassing the daily gate.
 
+## Support Desk tickets
+
+Optionally open a ticket in a Support Desk site whenever a site goes down, and add a note to it when it recovers:
+
+1. In the support site: Support → Settings → Uptime monitoring → switch on **Status monitor**, save, **Generate secret**.
+2. Here: Settings → **Support tickets** → paste the endpoint URL and secret, save, **Send test**.
+
+What's sent: `down` (with the cause and incident id), `up` (with the downtime in seconds), and `ssl_expiry` / `domain_expiry` (days left and date), on the same state changes that fire Slack/email. Each request is JSON, signed with `X-Monitor-Timestamp` and `X-Monitor-Signature: sha256=HMAC-SHA256(timestamp + "." + body, secret)`. Like the other channels it's fire-and-forget: if the support site is slow or down, the failure goes to the PHP error log and the checker carries on. Clear both fields to switch it off.
+
 ## Notes
 
 - Alerts only fire on state change (up→down, down→up), so you won't get spammed every cycle.
-- Slack and email alerts fire independently — configure either, both, or neither in `settings.php`.
+- Slack, email and Support Desk ticket alerts fire independently — configure any, all, or none in `settings.php`.
 - `checker.php` uses `curl_multi` so checks run in parallel — 50 sites finishes in roughly the time of your slowest single site, not 50x that.
 - Response check is HEAD-style (`CURLOPT_NOBODY`) — fast and cheap. If a site needs a full page load to catch app-level errors (not just server-up), swap that off for specific sites.

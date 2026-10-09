@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased] - 2026-08-03
 
+### Added
+- Support Desk tickets — a third alert channel, `um_send_ticket_webhook()` in `includes/functions.php`, called alongside Slack/email on the down and up transitions and on SSL/domain expiry alerts. Posts signed JSON (HMAC-SHA256, timestamped) to a Support Desk site, which opens a ticket on down/expiry and adds a note on recovery. Fire-and-forget: failures are logged, never thrown. Configured from a new "Support tickets" card on `settings.php` (endpoint URL + secret, CSRF-protected, with **Send test**). New settings `ticket_webhook_url` / `ticket_webhook_secret`; no schema change.
+
 ### Fixed
 - False "down" alerts from transient blips — a failed check now gets up to 2 retries (3s apart) within the same cron run before the site is actually marked down and an incident/alert fires. `um_check_sites_with_retry()` in `includes/checks.php` wraps the existing `um_check_sites_concurrently()`; `checker.php` and the admin "Check now" action (`um_check_site_now()`) both use it now.
 

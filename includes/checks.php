@@ -254,6 +254,7 @@ function um_process_site_result(PDO $pdo, int $siteId, array $mainResult, array 
         $pdo->prepare(
             "INSERT INTO incidents (site_id, started_at, cause) VALUES (?, ?, ?)"
         )->execute([$siteId, $now, $cause]);
+        $incidentId = (int)$pdo->lastInsertId();
 
         um_send_slack_alert(
             ":red_circle: *{$site['name']}* appears to be DOWN\n" .
@@ -269,6 +270,11 @@ function um_process_site_result(PDO $pdo, int $siteId, array $mainResult, array 
             "Reason: {$cause}\n" .
             "Time: {$now}"
         );
+
+        um_send_ticket_webhook('down', $site, [
+            'cause' => $cause,
+            'incident_id' => $incidentId,
+        ]);
     }
 
     // State change: was down, now up — close the incident + alert
@@ -299,6 +305,11 @@ function um_process_site_result(PDO $pdo, int $siteId, array $mainResult, array 
                 "Downtime: " . um_format_duration($duration) . "\n" .
                 "Time: {$now}"
             );
+
+            um_send_ticket_webhook('up', $site, [
+                'duration_seconds' => $duration,
+                'incident_id' => (int)$incident['id'],
+            ]);
         }
     }
 }
@@ -383,6 +394,11 @@ function um_maybe_alert_expiry(PDO $pdo, array $site, string $type, ?DateTime $e
 
         um_send_slack_alert(":warning: *{$label} expiring* — {$site['name']}\n" . $message);
         um_send_email_alert("{$label} expiring soon: {$site['name']}", $message);
+
+        um_send_ticket_webhook($type === 'ssl' ? 'ssl_expiry' : 'domain_expiry', $site, [
+            'days_left' => $daysRemaining,
+            'expires_at' => $expiresAt->format('Y-m-d'),
+        ]);
 
         $pdo->prepare("UPDATE sites SET {$flagColumn} = 1 WHERE id = ?")->execute([$site['id']]);
     } elseif (!$isNearExpiry && $alreadySent) {

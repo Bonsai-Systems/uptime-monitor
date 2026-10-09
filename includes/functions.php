@@ -209,3 +209,77 @@ function um_send_email_alert(string $subject, string $message): void {
         error_log("um_send_email_alert: mail() failed sending to {$to}.");
     }
 }
+
+/**
+ * Sends an alert to a Support Desk site so it can open a ticket (down,
+ * expiry) or add a note to the open one (up). Same fire-and-forget rules as
+ * the Slack/email channels: no-ops if unconfigured, failures are logged via
+ * error_log() and never thrown, so a slow or broken support site can't stop
+ * the checker.
+ *
+ * The body is JSON, signed with the shared secret so the support site can
+ * tell it's genuine:
+ *   X-Monitor-Timestamp: unix time
+ *   X-Monitor-Signature: sha256=HMAC-SHA256(timestamp . "." . body, secret)
+ * The receiver rejects anything more than 5 minutes old, or seen before.
+ *
+ * $event: down | up | ssl_expiry | domain_expiry | test.
+ * Returns null on success, or an error message (shown by Settings → Send test).
+ */
+function um_send_ticket_webhook(string $event, array $site = [], array $extra = []): ?string {
+    $url = trim((string)um_get_setting('ticket_webhook_url', ''));
+    $secret = (string)um_get_setting('ticket_webhook_secret', '');
+    if ($url === '' || $secret === '') {
+        return 'Support ticket webhook is not configured.'; // not configured yet
+    }
+
+    $body = json_encode([
+        'event' => $event,
+        'site' => [
+            'name' => (string)($site['name'] ?? ''),
+            'url' => (string)($site['url'] ?? ''),
+        ],
+        'occurred_at' => gmdate('c'),
+    ] + $extra);
+
+    if ($body === false) {
+        error_log('um_send_ticket_webhook: could not encode payload: ' . json_last_error_msg());
+        return 'Could not encode the alert.';
+    }
+
+    $timestamp = (string)time();
+    $signature = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $body, $secret);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'X-Monitor-Timestamp: ' . $timestamp,
+            'X-Monitor-Signature: ' . $signature,
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $response = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        error_log("um_send_ticket_webhook: {$event} for {$url} failed: {$curlError}");
+        return "Could not reach the support site: {$curlError}";
+    }
+    if ($code < 200 || $code >= 300) {
+        error_log("um_send_ticket_webhook: {$event} got HTTP {$code} from {$url}: " . substr((string)$response, 0, 300));
+        return $code === 401
+            ? 'The support site rejected the signature (HTTP 401). Check the secret matches.'
+            : ($code === 404
+                ? 'Not found (HTTP 404). Check the URL, and that the status monitor is switched on in the support site\'s settings.'
+                : "The support site returned HTTP {$code}.");
+    }
+
+    return null;
+}

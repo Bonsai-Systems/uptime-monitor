@@ -46,6 +46,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        if ($action === 'save_ticket_webhook') {
+            $ticketUrl = trim((string)($_POST['ticket_webhook_url'] ?? ''));
+            $ticketSecret = trim((string)($_POST['ticket_webhook_secret'] ?? ''));
+
+            // Same URL validation as site URLs: this is fetched server-side.
+            $scheme = strtolower((string)parse_url($ticketUrl, PHP_URL_SCHEME));
+            if ($ticketUrl !== '' && (!filter_var($ticketUrl, FILTER_VALIDATE_URL) || !in_array($scheme, ['http', 'https'], true))) {
+                $errors[] = 'Support ticket endpoint URL must be a valid http(s) URL.';
+            }
+            if ($ticketSecret !== '' && !preg_match('/^[A-Za-z0-9]{16,128}$/', $ticketSecret)) {
+                $errors[] = 'Secret must be the letters-and-numbers secret copied from the support site.';
+            }
+            if (($ticketUrl === '') !== ($ticketSecret === '')) {
+                $errors[] = 'Enter both the endpoint URL and the secret, or clear both to switch support tickets off.';
+            }
+
+            if (empty($errors)) {
+                um_set_setting('ticket_webhook_url', $ticketUrl);
+                um_set_setting('ticket_webhook_secret', $ticketSecret);
+                $notice = $ticketUrl === '' ? 'Support tickets switched off.' : 'Support ticket settings saved.';
+            }
+        }
+
+        if ($action === 'test_ticket_webhook') {
+            $error = um_send_ticket_webhook('test', ['name' => 'Test from the uptime monitor', 'url' => '']);
+            if ($error !== null) {
+                $errors[] = 'Test failed: ' . $error;
+            } else {
+                $notice = 'Test sent. The support site\'s Uptime monitoring settings should show it under "Last alert".';
+            }
+        }
+
         if ($action === 'change_password') {
             $current = (string)($_POST['current_password'] ?? '');
             $new = (string)($_POST['new_password'] ?? '');
@@ -70,6 +102,8 @@ $alertEmail = (string)um_get_setting('alert_email', '');
 $alertEmailFrom = (string)um_get_setting('alert_email_from', '');
 $concurrency = (int)um_get_setting('concurrency', 10);
 $expiryAlertDays = (int)um_get_setting('expiry_alert_days', 14);
+$ticketUrl = (string)um_get_setting('ticket_webhook_url', '');
+$ticketSecret = (string)um_get_setting('ticket_webhook_secret', '');
 $csrfToken = um_csrf_token();
 ?>
 <!DOCTYPE html>
@@ -151,6 +185,36 @@ $csrfToken = um_csrf_token();
 
             <div class="form-actions">
                 <button type="submit">Save alert settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="admin-card">
+        <h2>Support tickets</h2>
+        <p>Open a ticket in Support Desk when a site goes down or its SSL certificate/domain is about to expire, and add a note to it when the site comes back up. In the support site, go to Support &rarr; Settings &rarr; Uptime monitoring, switch on the status monitor, generate a secret and copy both values here. Clear both fields to switch this off.</p>
+        <form method="post" action="settings.php" class="site-form">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="action" value="save_ticket_webhook">
+
+            <label for="ticket_webhook_url">Endpoint URL</label>
+            <input type="text" id="ticket_webhook_url" name="ticket_webhook_url"
+                   placeholder="https://support.example.com/wp-json/bst/v1/monitor/status"
+                   value="<?= htmlspecialchars($ticketUrl) ?>">
+
+            <label for="ticket_webhook_secret">Secret</label>
+            <input type="text" id="ticket_webhook_secret" name="ticket_webhook_secret" autocomplete="off" spellcheck="false"
+                   value="<?= htmlspecialchars($ticketSecret) ?>">
+
+            <div class="form-actions">
+                <button type="submit">Save support ticket settings</button>
+            </div>
+        </form>
+
+        <form method="post" action="settings.php">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="action" value="test_ticket_webhook">
+            <div class="form-actions">
+                <button type="submit"<?= ($ticketUrl === '' || $ticketSecret === '') ? ' disabled' : '' ?>>Send test</button>
             </div>
         </form>
     </div>
