@@ -4,9 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 2026-08-03
+## [Unreleased] - 2026-10-13
 
 ### Added
+- Bigger dashboard cards: homepage screenshot, PageSpeed mobile/desktop performance scores (colour-coded to Google's 90/50 bands), and last WordPress content update date, alongside the existing uptime/response stats. Data comes from a new hourly cron entry point, `insights.php` (CLI-only, lock-protected so slow runs can't overlap), backed by `includes/insights.php`: PageSpeed Insights API, refreshed every 30 days per site (next day after a failure, previous scores kept), in batches of `pagespeed_batch_size` sites per run, with the desktop screenshot saved to `screenshots/site-{id}.jpg`; content date from the public WP REST API, about once a day. New "PageSpeed & screenshots" card on `settings.php` (`pagespeed_api_key`, `pagespeed_batch_size`) and a "Refresh insights" action on `admin.php`. Deleting a site removes its screenshot. **Requires the new `ALTER TABLE` migration at the bottom of `schema.sql` on existing databases.**
+
+### Changed
+- Dashboard grid columns widened (280px → 320px minimum) to fit the larger cards; single column with tighter padding under 600px.
 - Support Desk tickets — a third alert channel, `um_send_ticket_webhook()` in `includes/functions.php`, called alongside Slack/email on the down and up transitions and on SSL/domain expiry alerts. Posts signed JSON (HMAC-SHA256, timestamped) to a Support Desk site, which opens a ticket on down/expiry and adds a note on recovery. Fire-and-forget: failures are logged, never thrown. Configured from a new "Support tickets" card on `settings.php` (endpoint URL + secret, CSRF-protected, with **Send test**). New settings `ticket_webhook_url` / `ticket_webhook_secret`; no schema change.
 
 ### Fixed

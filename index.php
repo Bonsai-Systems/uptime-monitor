@@ -1,7 +1,7 @@
 <?php
 header('X-Robots-Tag: noindex, nofollow', true);
 require __DIR__ . '/includes/auth.php';
-require __DIR__ . '/includes/functions.php';
+require __DIR__ . '/includes/insights.php'; // display helpers + um_screenshot_url()
 um_start_session();
 $pdo = um_db();
 
@@ -78,19 +78,51 @@ $downCount = count(array_filter($sites, fn($s) => $s['current_status'] === 'down
             <?php
                 $uptime30 = um_uptime_percent($site['id'], 30);
                 $avgResp = um_avg_response_time($site['id'], 1);
+                $screenshotUrl = um_screenshot_url((int)$site['id']);
+                $mobileScore = $site['psi_mobile_score'] !== null ? (int)$site['psi_mobile_score'] : null;
+                $desktopScore = $site['psi_desktop_score'] !== null ? (int)$site['psi_desktop_score'] : null;
+                $psiTitle = $site['psi_checked_at']
+                    ? 'PageSpeed performance score, tested ' . date('j M Y', strtotime($site['psi_checked_at']))
+                    : 'PageSpeed performance score — not tested yet';
             ?>
             <a class="site-card <?= htmlspecialchars($site['current_status']) ?>" href="site.php?id=<?= $site['id'] ?>">
-                <div class="name"><?= htmlspecialchars($site['name']) ?></div>
-                <div class="url"><?= htmlspecialchars($site['url']) ?></div>
-                <span class="status-pill <?= htmlspecialchars($site['current_status']) ?>"><?= htmlspecialchars($site['current_status']) ?></span>
-                <div class="stats">
-                    <div>
-                        <strong><?= $uptime30 ?>%</strong>
-                        30-day uptime
+                <div class="shot">
+                    <?php if ($screenshotUrl): ?>
+                        <img src="<?= htmlspecialchars($screenshotUrl) ?>" alt="Screenshot of <?= htmlspecialchars($site['name']) ?> homepage" width="400" height="250" loading="lazy" decoding="async">
+                    <?php else: ?>
+                        <span class="shot-empty">Screenshot pending</span>
+                    <?php endif; ?>
+                </div>
+                <div class="body">
+                    <div class="name"><?= htmlspecialchars($site['name']) ?></div>
+                    <div class="url"><?= htmlspecialchars($site['url']) ?></div>
+                    <span class="status-pill <?= htmlspecialchars($site['current_status']) ?>"><?= htmlspecialchars($site['current_status']) ?></span>
+                    <div class="stats">
+                        <div>
+                            <strong><?= $uptime30 ?>%</strong>
+                            30-day uptime
+                        </div>
+                        <div>
+                            <strong><?= $avgResp !== null ? $avgResp . 'ms' : '—' ?></strong>
+                            Avg response
+                        </div>
+                        <div title="<?= htmlspecialchars($psiTitle) ?>">
+                            <strong class="score <?= um_score_status($mobileScore) ?>"><?= $mobileScore ?? '—' ?></strong>
+                            Mobile
+                        </div>
+                        <div title="<?= htmlspecialchars($psiTitle) ?>">
+                            <strong class="score <?= um_score_status($desktopScore) ?>"><?= $desktopScore ?? '—' ?></strong>
+                            Desktop
+                        </div>
                     </div>
-                    <div>
-                        <strong><?= $avgResp !== null ? $avgResp . 'ms' : '—' ?></strong>
-                        Avg response
+                    <div class="meta">
+                        Content updated:
+                        <?php if ($site['content_updated_at']): ?>
+                            <strong><?= htmlspecialchars(um_format_ago($site['content_updated_at'])) ?></strong>
+                            (<?= htmlspecialchars(date('j M Y', strtotime($site['content_updated_at']))) ?>)
+                        <?php else: ?>
+                            <strong>—</strong>
+                        <?php endif; ?>
                     </div>
                 </div>
             </a>

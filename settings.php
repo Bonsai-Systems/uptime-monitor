@@ -69,6 +69,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        if ($action === 'save_pagespeed') {
+            $psiKey = trim((string)($_POST['pagespeed_api_key'] ?? ''));
+            $psiBatch = (int)($_POST['pagespeed_batch_size'] ?? 4);
+
+            // Google API keys are 39 chars of [A-Za-z0-9_-]; allow some slack.
+            if ($psiKey !== '' && !preg_match('/^[A-Za-z0-9_\-]{20,100}$/', $psiKey)) {
+                $errors[] = 'PageSpeed API key doesn\'t look right — paste the key exactly as Google Cloud shows it.';
+            }
+            if ($psiBatch < 1 || $psiBatch > 20) {
+                $errors[] = 'Sites per run must be between 1 and 20.';
+            }
+
+            if (empty($errors)) {
+                um_set_setting('pagespeed_api_key', $psiKey);
+                um_set_setting('pagespeed_batch_size', (string)$psiBatch);
+                $notice = 'PageSpeed settings saved.';
+            }
+        }
+
         if ($action === 'test_ticket_webhook') {
             $error = um_send_ticket_webhook('test', ['name' => 'Test from the uptime monitor', 'url' => '']);
             if ($error !== null) {
@@ -104,6 +123,8 @@ $concurrency = (int)um_get_setting('concurrency', 10);
 $expiryAlertDays = (int)um_get_setting('expiry_alert_days', 14);
 $ticketUrl = (string)um_get_setting('ticket_webhook_url', '');
 $ticketSecret = (string)um_get_setting('ticket_webhook_secret', '');
+$psiKey = (string)um_get_setting('pagespeed_api_key', '');
+$psiBatch = (int)um_get_setting('pagespeed_batch_size', 4);
 $csrfToken = um_csrf_token();
 ?>
 <!DOCTYPE html>
@@ -215,6 +236,32 @@ $csrfToken = um_csrf_token();
             <input type="hidden" name="action" value="test_ticket_webhook">
             <div class="form-actions">
                 <button type="submit"<?= ($ticketUrl === '' || $ticketSecret === '') ? ' disabled' : '' ?>>Send test</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="admin-card">
+        <h2>PageSpeed &amp; screenshots</h2>
+        <p>Mobile/desktop performance scores and the dashboard screenshots come from Google PageSpeed Insights, refreshed about once a month per site by <code>insights.php</code> (run it hourly on cron). You need an API key in practice: keyless requests share one tiny Google-wide quota that's usually used up. Create a free key in Google Cloud Console (enable the &ldquo;PageSpeed Insights API&rdquo;, then Credentials &rarr; API key).</p>
+        <form method="post" action="settings.php" class="site-form">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="action" value="save_pagespeed">
+
+            <div class="form-row">
+                <div>
+                    <label for="pagespeed_api_key">PageSpeed Insights API key</label>
+                    <input type="text" id="pagespeed_api_key" name="pagespeed_api_key" autocomplete="off" spellcheck="false"
+                           value="<?= htmlspecialchars($psiKey) ?>">
+                </div>
+                <div>
+                    <label for="pagespeed_batch_size">Sites per hourly run</label>
+                    <input type="number" id="pagespeed_batch_size" name="pagespeed_batch_size" min="1" max="20"
+                           value="<?= (int)$psiBatch ?>">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit">Save PageSpeed settings</button>
             </div>
         </form>
     </div>

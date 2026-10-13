@@ -162,6 +162,39 @@ function um_expiry_status(?int $daysRemaining, int $warnDays = 30, int $critical
     return 'ok';
 }
 
+/**
+ * Maps a 0–100 PageSpeed score to a CSS class using Google's own bands:
+ * 90+ good, 50–89 needs improvement, under 50 poor.
+ */
+function um_score_status(?int $score): string {
+    if ($score === null) {
+        return 'unknown';
+    }
+    if ($score >= 90) {
+        return 'good';
+    }
+    if ($score >= 50) {
+        return 'warn';
+    }
+    return 'poor';
+}
+
+/**
+ * Human "how long ago" for a past datetime — "today", "yesterday",
+ * "12 days ago", "3 months ago", "2 years ago".
+ */
+function um_format_ago(?string $datetime): string {
+    if (!$datetime) {
+        return '—';
+    }
+    $days = (int)floor((time() - strtotime($datetime)) / 86400);
+    if ($days <= 0) return 'today';
+    if ($days === 1) return 'yesterday';
+    if ($days < 60) return $days . ' days ago';
+    if ($days < 730) return (int)floor($days / 30) . ' months ago';
+    return (int)floor($days / 365) . ' years ago';
+}
+
 function um_format_duration(?int $seconds): string {
     if ($seconds === null) return '—';
     if ($seconds < 60) return $seconds . 's';

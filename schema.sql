@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS sites (
     domain_expires_at DATETIME NULL,
     domain_checked_at DATETIME NULL,
     domain_alert_sent TINYINT(1) NOT NULL DEFAULT 0,
+    psi_mobile_score TINYINT UNSIGNED NULL,
+    psi_desktop_score TINYINT UNSIGNED NULL,
+    psi_checked_at DATETIME NULL,
+    psi_attempted_at DATETIME NULL,
+    psi_error VARCHAR(500) NULL,
+    content_updated_at DATETIME NULL,
+    content_checked_at DATETIME NULL,
     agency ENUM('Bonsai Digital', 'SPS Marketing', 'Webheads', 'TTNG', 'Realityhouse', 'Seedbed', 'twohundred.digital') NOT NULL DEFAULT 'Bonsai Digital',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -135,3 +142,17 @@ CREATE TABLE IF NOT EXISTS settings (
 -- ALTER TABLE checks
 --     ADD COLUMN site_path_id INT NULL AFTER site_id,
 --     ADD FOREIGN KEY (site_path_id) REFERENCES site_paths(id) ON DELETE CASCADE;
+
+-- --------------------------------------------------------------------------
+-- Migration: run this once against an existing database that predates the
+-- dashboard card insights (PageSpeed mobile/desktop scores + screenshot, and
+-- last WordPress content update), refreshed by insights.php.
+-- --------------------------------------------------------------------------
+-- ALTER TABLE sites
+--     ADD COLUMN psi_mobile_score TINYINT UNSIGNED NULL,
+--     ADD COLUMN psi_desktop_score TINYINT UNSIGNED NULL,
+--     ADD COLUMN psi_checked_at DATETIME NULL,
+--     ADD COLUMN psi_attempted_at DATETIME NULL,
+--     ADD COLUMN psi_error VARCHAR(500) NULL,
+--     ADD COLUMN content_updated_at DATETIME NULL,
+--     ADD COLUMN content_checked_at DATETIME NULL;

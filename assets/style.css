@@ -120,18 +120,19 @@ header.site-header .header-actions {
 
 .site-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
 }
 
 .site-card {
     background: var(--surface);
     border-radius: 10px;
-    padding: 18px 20px;
+    overflow: hidden; /* clip the screenshot to the rounded corners */
     box-shadow: 0 1px 3px var(--surface-shadow);
     text-decoration: none;
     color: inherit;
-    display: block;
+    display: flex;
+    flex-direction: column;
     border-left: 4px solid var(--unknown);
     transition: transform 0.1s ease;
 }
@@ -139,6 +140,27 @@ header.site-header .header-actions {
 .site-card:hover { transform: translateY(-2px); }
 .site-card.up { border-left-color: var(--up); }
 .site-card.down { border-left-color: var(--down); }
+
+/* Screenshot — fixed 16:10 box so cards don't shift as images load (CLS),
+   cropped from the top since that's the part of a homepage worth seeing. */
+.site-card .shot {
+    aspect-ratio: 16 / 10;
+    background: var(--brand-light);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.site-card .shot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+}
+.site-card .shot-empty { font-size: 12px; color: var(--muted); }
+
+.site-card .body { padding: 16px 20px 18px; flex: 1; }
 
 .site-card .name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
 .site-card .url { font-size: 12px; color: var(--muted); margin-bottom: 10px; word-break: break-all; }
@@ -176,13 +198,36 @@ header.site-header .header-actions {
 .expiry-unknown { color: var(--muted); }
 
 .site-card .stats {
-    display: flex;
-    gap: 16px;
-    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
     font-size: 12px;
     color: var(--muted);
 }
 .site-card .stats strong { color: var(--text); display: block; font-size: 14px; }
+
+/* PageSpeed score — coloured underline rather than coloured text so the
+   number itself keeps full contrast in both themes. */
+.site-card .stats strong.score {
+    display: inline-block;
+    min-width: 28px;
+    padding-bottom: 1px;
+    border-bottom: 3px solid var(--unknown);
+}
+.site-card .stats strong.score.good { border-bottom-color: var(--up); }
+.site-card .stats strong.score.warn { border-bottom-color: var(--warn); }
+.site-card .stats strong.score.poor { border-bottom-color: var(--down); }
+
+.site-card .meta {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+    font-size: 12px;
+    color: var(--muted);
+}
+.site-card .meta strong { color: var(--text); font-weight: 600; }
 
 .back-link {
     display: inline-block;
@@ -408,3 +453,8 @@ table.admin-table td a { color: var(--brand-primary); }
     text-decoration: underline;
 }
 .link-button-danger { color: #c0392b; }
+
+@media (max-width: 600px) {
+    .container { padding: 16px; }
+    .site-grid { grid-template-columns: 1fr; }
+}

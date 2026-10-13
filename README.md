@@ -27,11 +27,17 @@ Self-hosted UptimeRobot replacement. PHP + MySQL, no frameworks, no per-check bi
    - Checker concurrency
    - SSL/domain expiry alert threshold (days before expiry to notify — default 14)
    - Admin password (requires the current password to change)
+   - PageSpeed Insights API key and sites per run (see "Dashboard cards" below)
 6. Upload the whole folder to a subdomain, e.g. `status.bonsaidigital.co.uk`.
 7. Add the cron job (every minute — each site respects its own `check_interval_seconds` so this doesn't mean every site is hit every minute):
    ```
    * * * * * /usr/bin/php /home/yourusername/uptime-monitor/checker.php >> /home/yourusername/uptime-monitor/cron.log 2>&1
    ```
+   And a second, hourly one for PageSpeed scores, screenshots and content dates (CLI only, refuses web requests):
+   ```
+   0 * * * * /usr/bin/php /home/yourusername/uptime-monitor/insights.php >> /home/yourusername/uptime-monitor/cron.log 2>&1
+   ```
+   The `screenshots/` folder is created automatically and must be writable by the cron user.
 8. Visit `index.php` for the dashboard, click through to `site.php?id=X` for per-site stats, `admin.php` to manage sites, or `settings.php` to change alert/checker/password settings.
 
 ## Admin panel
@@ -68,6 +74,15 @@ MySQL is the source of truth for both the dashboard and reporting, so you don't 
 - Checked on the same cron cycle as the main URL, with the same retry behaviour.
 - If the main URL or any active path fails, the whole site is marked down and a single Slack/email alert fires, naming which path caused it.
 - Per-path status is shown on the site's edit screen and on `site.php`; per-path check history is logged but doesn't affect the site's own uptime%/response-time stats (those stay about the main URL).
+
+## Dashboard cards
+
+Each card on `index.php` shows a homepage screenshot, name/URL/status, 30-day uptime, average response time, PageSpeed mobile/desktop performance scores, and when the site's WordPress content was last updated. Everything except uptime/response comes from `insights.php` (`includes/insights.php`):
+
+- **PageSpeed scores + screenshot** — Google PageSpeed Insights API, one mobile and one desktop run per site. The screenshot is the desktop run's final frame, saved to `screenshots/site-{id}.jpg`. Refreshed every 30 days per site; a failed run retries the next day and keeps the previous scores. `Sites per hourly run` (Settings, default 4) caps how many sites one run tests, so 50 sites take about half a day to fill in from scratch. Score underline colours follow Google's bands: 90+ green, 50–89 amber, under 50 red.
+  - **Needs an API key** (Settings → PageSpeed & screenshots). Keyless requests share a Google-wide quota that's usually exhausted. Free key: Google Cloud Console → enable "PageSpeed Insights API" → Credentials → API key. Quota is 25,000/day, far more than this uses.
+- **Content updated** — latest `modified` date across posts and pages from the public WP REST API (`/wp-json/wp/v2/posts|pages?orderby=modified`). Checked about once a day. Non-WordPress sites, or sites blocking the REST API, show "—".
+- **Refresh insights** on the admin table re-runs both for one site immediately (takes up to a minute).
 
 ## SSL & domain expiry
 

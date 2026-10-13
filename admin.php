@@ -1,7 +1,7 @@
 <?php
 header('X-Robots-Tag: noindex, nofollow', true);
 require __DIR__ . '/includes/auth.php';
-require __DIR__ . '/includes/checks.php';
+require __DIR__ . '/includes/insights.php';
 
 um_require_login();
 
@@ -144,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int)($_POST['id'] ?? 0);
             if ($id > 0) {
                 $pdo->prepare("DELETE FROM sites WHERE id = ?")->execute([$id]);
+                um_delete_screenshot($id);
                 $notice = 'Site deleted.';
             }
         }
@@ -161,6 +162,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id > 0) {
                 $ok = um_check_site_expiry_now($pdo, $id);
                 $notice = $ok ? 'SSL/domain expiry refreshed.' : 'Site not found.';
+            }
+        }
+
+        if ($action === 'refresh_insights') {
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id > 0) {
+                set_time_limit(300); // two PageSpeed runs can take a minute or more
+                $insightErrors = um_refresh_site_insights_now($pdo, $id);
+                if ($insightErrors === null) {
+                    $notice = 'Site not found.';
+                } elseif (empty($insightErrors)) {
+                    $notice = 'PageSpeed scores, screenshot and content date refreshed.';
+                } else {
+                    $notice = 'Insights refreshed with problems — ' . implode(' | ', $insightErrors);
+                }
             }
         }
 
@@ -476,6 +492,14 @@ $csrfToken = um_csrf_token();
                             <input type="hidden" name="action" value="check_expiry_now">
                             <input type="hidden" name="id" value="<?= (int)$site['id'] ?>">
                             <button type="submit" class="link-button">Refresh expiry</button>
+                        </form>
+
+                        <form method="post" action="admin.php" class="inline-form"
+                              onsubmit="this.querySelector('button').textContent = 'Refreshing…';">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                            <input type="hidden" name="action" value="refresh_insights">
+                            <input type="hidden" name="id" value="<?= (int)$site['id'] ?>">
+                            <button type="submit" class="link-button" title="Re-run PageSpeed (mobile + desktop), screenshot and content date — takes up to a minute">Refresh insights</button>
                         </form>
 
                         <form method="post" action="admin.php" class="inline-form">
