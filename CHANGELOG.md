@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 2026-10-13
+## [1.0.0] - 2026-10-13
 
 ### Added
 - Dashboard API: read-only `api.php` returning a JSON summary (up/down/unknown counts, sites down with start time and cause, SSL/domain expiring within 30 days, incidents recovered in the last 24 hours) for the Bonsai desktop dashboard. Authenticated with a key sent as `Authorization: Bearer` or `X-Api-Key` (never the query string). Only the key's SHA-256 hash is stored (`dashboard_api_key_hash`), so it's shown once on creation. New "Dashboard API" card on `settings.php` to create, replace or switch off the key (CSRF-protected). Answers 404 while no key is set. Times read with `UNIX_TIMESTAMP()` so they're correct regardless of MySQL/PHP time zones. No schema change.
