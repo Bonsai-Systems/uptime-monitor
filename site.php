@@ -24,6 +24,11 @@ $sitePaths = array_filter(um_site_paths($siteId), fn($p) => $p['is_active']);
 $sslDays    = um_days_until($site['ssl_expires_at']);
 $domainDays = um_days_until($site['domain_expires_at']);
 
+$psiScores = [
+    'Mobile'  => $site['psi_mobile_score'] !== null ? (int)$site['psi_mobile_score'] : null,
+    'Desktop' => $site['psi_desktop_score'] !== null ? (int)$site['psi_desktop_score'] : null,
+];
+
 $chartRanges = [
     '24h' => um_response_time_series($siteId, 24),
     '7d'  => um_response_time_series($siteId, 24 * 7),
@@ -114,6 +119,33 @@ $chartRanges = [
             <?php endif; ?>
         </div>
     </div>
+
+    <div class="summary-bar">
+        <?php foreach ($psiScores as $strategy => $score): ?>
+            <div class="summary-card">
+                <div class="label">PageSpeed (<?= strtolower($strategy) ?>)</div>
+                <div class="value"><span class="score <?= um_score_status($score) ?>"><?= $score ?? '—' ?></span></div>
+                <?php if ($site['psi_checked_at']): ?>
+                    <div class="label">Tested <?= htmlspecialchars(date('d M Y', strtotime($site['psi_checked_at']))) ?></div>
+                <?php else: ?>
+                    <div class="label">Not tested yet</div>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+        <div class="summary-card">
+            <div class="label">Content updated</div>
+            <?php if ($site['content_updated_at']): ?>
+                <div class="value"><?= htmlspecialchars(um_format_ago($site['content_updated_at'])) ?></div>
+                <div class="label"><?= htmlspecialchars(date('d M Y', strtotime($site['content_updated_at']))) ?></div>
+            <?php else: ?>
+                <div class="value expiry-unknown">Unknown</div>
+                <div class="label">Not WordPress, REST API blocked, or not yet checked</div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php if ($site['psi_error'] !== null): ?>
+        <p class="insight-note">The latest PageSpeed test didn't complete, so these are the last good scores. It will try again within a day.</p>
+    <?php endif; ?>
 
     <?php if (!empty($sitePaths)): ?>
     <h3>Check paths</h3>

@@ -208,17 +208,24 @@ header.site-header .header-actions {
 }
 .site-card .stats strong { color: var(--text); display: block; font-size: 14px; }
 
-/* PageSpeed score — coloured underline rather than coloured text so the
-   number itself keeps full contrast in both themes. */
-.site-card .stats strong.score {
+/* PageSpeed score (dashboard cards + site.php) — coloured underline rather
+   than coloured text so the number itself keeps full contrast in both themes. */
+.score {
     display: inline-block;
     min-width: 28px;
     padding-bottom: 1px;
     border-bottom: 3px solid var(--unknown);
 }
-.site-card .stats strong.score.good { border-bottom-color: var(--up); }
-.site-card .stats strong.score.warn { border-bottom-color: var(--warn); }
-.site-card .stats strong.score.poor { border-bottom-color: var(--down); }
+.score.good { border-bottom-color: var(--up); }
+.score.warn { border-bottom-color: var(--warn); }
+.score.poor { border-bottom-color: var(--down); }
+.summary-card .score { border-bottom-width: 4px; }
+
+.insight-note {
+    margin: -12px 0 24px;
+    font-size: 12px;
+    color: var(--muted);
+}
 
 .site-card .meta {
     margin-top: 14px;
