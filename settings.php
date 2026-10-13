@@ -97,6 +97,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        if ($action === 'generate_dashboard_key') {
+            // Only the hash is stored, so the key is shown once, here.
+            $newDashboardKey = bin2hex(random_bytes(24));
+            um_set_setting('dashboard_api_key_hash', hash('sha256', $newDashboardKey));
+            um_set_setting('dashboard_api_key_created', gmdate('Y-m-d H:i') . ' UTC');
+            $notice = 'New dashboard API key created. Copy it now: it won\'t be shown again. Any old key has stopped working.';
+        }
+
+        if ($action === 'disable_dashboard_key') {
+            um_set_setting('dashboard_api_key_hash', '');
+            um_set_setting('dashboard_api_key_created', '');
+            $notice = 'Dashboard API switched off.';
+        }
+
         if ($action === 'change_password') {
             $current = (string)($_POST['current_password'] ?? '');
             $new = (string)($_POST['new_password'] ?? '');
@@ -125,6 +139,11 @@ $ticketUrl = (string)um_get_setting('ticket_webhook_url', '');
 $ticketSecret = (string)um_get_setting('ticket_webhook_secret', '');
 $psiKey = (string)um_get_setting('pagespeed_api_key', '');
 $psiBatch = (int)um_get_setting('pagespeed_batch_size', 4);
+$dashboardKeyOn = (string)um_get_setting('dashboard_api_key_hash', '') !== '';
+$dashboardKeyCreated = (string)um_get_setting('dashboard_api_key_created', '');
+$newDashboardKey = $newDashboardKey ?? '';
+// Shown so it can be pasted into the dashboard. Display only, never fetched.
+$apiUrl = (!empty($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'your-monitor') . rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/') . '/api.php';
 $csrfToken = um_csrf_token();
 ?>
 <!DOCTYPE html>
@@ -264,6 +283,44 @@ $csrfToken = um_csrf_token();
                 <button type="submit">Save PageSpeed settings</button>
             </div>
         </form>
+    </div>
+
+    <div class="admin-card">
+        <h2>Dashboard API</h2>
+        <p>A read-only JSON summary (sites up/down, open incidents, SSL/domain expiring within 30 days) for the Bonsai desktop dashboard. It needs a key; without one the endpoint is switched off. Creating a new key stops the old one working.</p>
+
+        <?php if ($newDashboardKey !== ''): ?>
+            <p class="form-notice">
+                <strong>Your new key (shown once):</strong><br>
+                <code><?= htmlspecialchars($newDashboardKey) ?></code>
+            </p>
+        <?php endif; ?>
+
+        <p>
+            Status: <strong><?= $dashboardKeyOn ? 'On' : 'Off' ?></strong>
+            <?php if ($dashboardKeyOn && $dashboardKeyCreated !== ''): ?>
+                (key created <?= htmlspecialchars($dashboardKeyCreated) ?>)
+            <?php endif; ?>
+            <br>Address: <code><?= htmlspecialchars($apiUrl) ?></code>
+        </p>
+
+        <form method="post" action="settings.php">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+            <input type="hidden" name="action" value="generate_dashboard_key">
+            <div class="form-actions">
+                <button type="submit"><?= $dashboardKeyOn ? 'Create a new key' : 'Create key' ?></button>
+            </div>
+        </form>
+
+        <?php if ($dashboardKeyOn): ?>
+            <form method="post" action="settings.php">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                <input type="hidden" name="action" value="disable_dashboard_key">
+                <div class="form-actions">
+                    <button type="submit">Switch off</button>
+                </div>
+            </form>
+        <?php endif; ?>
     </div>
 
     <div class="admin-card">

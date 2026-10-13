@@ -103,6 +103,15 @@ Optionally open a ticket in a Support Desk site whenever a site goes down, and a
 
 What's sent: `down` (with the cause and incident id), `up` (with the downtime in seconds), and `ssl_expiry` / `domain_expiry` (days left and date), on the same state changes that fire Slack/email. Each request is JSON, signed with `X-Monitor-Timestamp` and `X-Monitor-Signature: sha256=HMAC-SHA256(timestamp + "." + body, secret)`. Like the other channels it's fire-and-forget: if the support site is slow or down, the failure goes to the PHP error log and the checker carries on. Clear both fields to switch it off.
 
+## Dashboard API
+
+A read-only JSON summary for the Bonsai desktop dashboard: `GET /api.php` returns counts (up/down/unknown), sites down now (with when and why), SSL/domain expiring within 30 days, and incidents recovered in the last 24 hours. Times are ISO 8601 UTC.
+
+1. Settings → **Dashboard API** → **Create key**. Copy the key straight away: only a hash is stored, so it's shown once.
+2. Send it as `Authorization: Bearer <key>` (or `X-Api-Key: <key>`, for hosts that strip the Authorization header). It's never accepted in the query string, so it can't end up in access logs.
+
+With no key the endpoint answers 404. **Create a new key** replaces the old one; **Switch off** removes it. It never changes anything.
+
 ## Notes
 
 - Alerts only fire on state change (up→down, down→up), so you won't get spammed every cycle.
