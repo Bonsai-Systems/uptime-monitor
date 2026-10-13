@@ -216,6 +216,7 @@ header.site-header .header-actions {
     padding-bottom: 1px;
     border-bottom: 3px solid var(--unknown);
 }
+.score.unknown { border-bottom-color: transparent; } /* no underline under "—" */
 .score.good { border-bottom-color: var(--up); }
 .score.warn { border-bottom-color: var(--warn); }
 .score.poor { border-bottom-color: var(--down); }

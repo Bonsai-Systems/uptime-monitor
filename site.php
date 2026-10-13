@@ -1,5 +1,7 @@
 <?php
 header('X-Robots-Tag: noindex, nofollow', true);
+// Live status data — never let host/CDN caches (e.g. SiteGround Dynamic Cache) serve a stale copy.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0', true);
 require __DIR__ . '/includes/functions.php';
 $pdo = um_db();
 
