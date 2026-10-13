@@ -168,14 +168,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'refresh_insights') {
             $id = (int)($_POST['id'] ?? 0);
             if ($id > 0) {
-                set_time_limit(300); // two PageSpeed runs can take a minute or more
-                $insightErrors = um_refresh_site_insights_now($pdo, $id);
-                if ($insightErrors === null) {
-                    $notice = 'Site not found.';
-                } elseif (empty($insightErrors)) {
-                    $notice = 'PageSpeed scores, screenshot and content date refreshed.';
-                } else {
-                    $notice = 'Insights refreshed with problems — ' . implode(' | ', $insightErrors);
+                // Two PageSpeed runs can take a minute or more. Some shared hosts
+                // disable set_time_limit(), which is a fatal error on PHP 8 if called.
+                if (function_exists('set_time_limit')) {
+                    @set_time_limit(300);
+                }
+
+                try {
+                    $insightErrors = um_refresh_site_insights_now($pdo, $id);
+                    if ($insightErrors === null) {
+                        $notice = 'Site not found.';
+                    } elseif (empty($insightErrors)) {
+                        $notice = 'PageSpeed scores, screenshot and content date refreshed.';
+                    } else {
+                        $notice = 'Insights refreshed with problems — ' . implode(' | ', $insightErrors);
+                    }
+                } catch (Throwable $e) {
+                    error_log('refresh_insights failed for site ' . $id . ': ' . $e->getMessage());
+                    if (stripos($e->getMessage(), 'Unknown column') !== false) {
+                        $errors[] = 'The database is missing the new insights columns — run the "dashboard card insights" ALTER TABLE migration at the bottom of schema.sql, then try again.';
+                    } else {
+                        $errors[] = 'Refresh insights failed: ' . $e->getMessage();
+                    }
                 }
             }
         }

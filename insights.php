@@ -21,7 +21,11 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/includes/insights.php';
 
-set_time_limit(0);
+// CLI has no time limit by default; this only matters if the host sets one.
+// Guarded because some hosts disable set_time_limit() (fatal on PHP 8).
+if (function_exists('set_time_limit')) {
+    @set_time_limit(0);
+}
 
 // Skip this run if the previous one is still going (slow PageSpeed batch).
 $lock = fopen(sys_get_temp_dir() . '/bonsai-uptime-insights.lock', 'c');
